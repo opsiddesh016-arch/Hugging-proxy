@@ -6,25 +6,33 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
-app.post("/proxy/:model", async (req, res) => {
-  const { model } = req.params;
-  const { inputs } = req.body;
+app.get("/", (req, res) => {
+  res.send("✅ Hugging Face Proxy is Running!");
+});
+
+app.use("/", async (req, res) => {
+  const targetUrl = req.url.slice(1); // remove leading slash
+  if (!targetUrl.startsWith("https://")) {
+    return res.status(400).json({ error: "Missing or invalid URL" });
+  }
 
   try {
-    const response = await fetch(`https://api-inference.huggingface.co/models/${model}`, {
-      method: "POST",
+    const response = await fetch(targetUrl, {
+      method: req.method,
       headers: {
-        "Authorization": `Bearer ${process.env.HF_TOKEN}`,
-        "Content-Type": "application/json"
+        ...req.headers,
+        host: "",
       },
-      body: JSON.stringify({ inputs }),
+      body: ["GET", "HEAD"].includes(req.method) ? undefined : JSON.stringify(req.body),
     });
 
-    const data = await response.json();
-    res.json(data);
+    const data = await response.text();
+    res.status(response.status).send(data);
   } catch (err) {
-    res.status(500).json({ error: "Proxy error", details: err.message });
+    console.error("Proxy error:", err);
+    res.status(500).json({ error: "Proxy failed" });
   }
 });
 
-app.listen(3000, () => console.log("Proxy running on port 3000"));
+const PORT = process.env.PORT || 3000;
+app.listen(PORT, () => console.log(`Proxy running on port ${PORT}`));
